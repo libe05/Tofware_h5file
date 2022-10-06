@@ -9,8 +9,9 @@ import numpy as np
 from datetime import datetime, timedelta
 import os
 import h5py
+import warnings
 
-def h5_read_file(filepath):  
+def h5_read_file(filepath,UMR_num=-1):  
     
     '''
 
@@ -19,6 +20,7 @@ def h5_read_file(filepath):
     filepath : TYPE String
         Path to folder including all processed h5 files from Tofware. 
         Example: r"../../03_Data/CAFE_EU_02/CAFE_EU_02_2020-05-26/Avg-30/Processed/"
+    UMR_num: number of UMR wanted
 
     Returns : dataframe including date and time as index, HR peaks and nominal unit mass as header and the corresponding data from the mass spec
     peak labels which can then be used for headers by converting the binary string to a string: 
@@ -53,16 +55,30 @@ def h5_read_file(filepath):
     for i,label in enumerate(peaklabel):
         peakname.append(label.decode())
     
-    #while cycle for confirming the starting position of UMR
-    UMR_start=0
-    while peaklabel[UMR_start].decode()!='nominal2':
-        UMR_start=UMR_start+1
     
     peakdata = hf['PeakData/PeakData'][()]/Tofperiod*10**(9) # unit in ions/second
-    df_peakdata_HR = pd.DataFrame(peakdata[:,0,0,0:UMR_start],columns = peakname[0:UMR_start])
-    UMR_upper=800 # upper cutoff for UMR
-    df_peakdata_UMR = pd.DataFrame(peakdata[:,0,0,UMR_start:UMR_start+UMR_upper],columns = df_peaktable['mass'][UMR_start:UMR_start+UMR_upper])
-    df = pd.concat([df_time, df_peakdata_HR, df_peakdata_UMR],axis=1) # df includes time, HR and part of UMR
+    # to judge whether UMR exists in the data file
+    if('nominal2' in peakname):
+        UMR_start=0
+        #while cycle for confirming the starting position of UMR
+        while peaklabel[UMR_start].decode()!='nominal2':
+            UMR_start=UMR_start+1
+        
+        df_peakdata_HR = pd.DataFrame(peakdata[:,0,0,0:UMR_start],columns = peakname[0:UMR_start])
+        if (UMR_num==-1):
+            df_peakdata_UMR = pd.DataFrame(peakdata[:,0,0,UMR_start:],columns = df_peaktable['mass'][UMR_start:])
+        else:
+            # to judge whether the given number of UMR is our of range
+            if (UMR_num>(np.size(df_peaktable['mass'])-UMR_start)):
+                warnings.warn('The given number of UMR is out of the range')
+                df_peakdata_UMR = pd.DataFrame(peakdata[:,0,0,UMR_start:],columns = df_peaktable['mass'][UMR_start:])
+            else:
+                df_peakdata_UMR = pd.DataFrame(peakdata[:,0,0,UMR_start:UMR_start+UMR_num],columns = df_peaktable['mass'][UMR_start:UMR_start+UMR_num])
+        df = pd.concat([df_time, df_peakdata_HR, df_peakdata_UMR],axis=1) # df includes time, HR and part of UMR
+    else:
+        df_peakdata_HR = pd.DataFrame(peakdata[:,0,0,0:],columns = peakname[0:])
+        df = pd.concat([df_time, df_peakdata_HR],axis=1)
+
     df.index = df['date'] 
     df=df.drop('UnixTime',axis=1)
     df=df.drop('date',axis=1)
@@ -70,7 +86,8 @@ def h5_read_file(filepath):
     md = exactmass - round(exactmass)
     md_exactmass = pd.DataFrame([exactmass,md],index=['mass', 'massdefect'])
     md_exactmass.columns = peakname
-    md_exactmass=md_exactmass.drop('Total ion current', axis=1)
+    if ('Total ion current' in md_exactmass): 
+        md_exactmass=md_exactmass.drop('Total ion current', axis=1)
     if ('nominal2' in md_exactmass): 
         md_exactmass = md_exactmass.drop('nominal2',axis=1)
 
@@ -78,7 +95,7 @@ def h5_read_file(filepath):
     return df,md_exactmass
 
 
-def h5_read_folder(filepath):  
+def h5_read_folder(filepath,UMR_num=-1):  
     '''
 
     Parameters
@@ -86,6 +103,7 @@ def h5_read_folder(filepath):
     filepath : TYPE String
         Path to folder including all processed h5 files from Tofware. 
         Example: r"../../03_Data/CAFE_EU_02/CAFE_EU_02_2020-05-26/Avg-30/Processed/"
+    UMR_num: number of UMR wanted
 
     Returns : dataframe including date and time as index, HR peaks and nominal unit mass as header and the corresponding data from the mass spec
     -------
@@ -98,7 +116,7 @@ def h5_read_folder(filepath):
             path = filepath+filename
             path=path.encode('unicode_escape').decode()
             
-            [df,md_exactmass] = h5_read_file(path)
+            [df,md_exactmass] = h5_read_file(path,UMR_num)
             df_help.append(df)
     df = pd.concat(df_help,axis=0)
     df=df.sort_index() # make sure that the data is in sequence regarding time
