@@ -35,6 +35,7 @@ def h5_read_file(filepath):
     buftime_h5file = buftime[()] # buftime readout in seconds from AcquisitionTimeZero
 
     DAQstart_h5file = hf['TimingData'].attrs['AcquisitionTimeZero'] # get start time of file 
+    Tofperiod = hf['TimingData'].attrs['TofPeriod'] # Tofperiod used for converting from ions/extraction to ions/second
 
     time_h5file_matlab = ((DAQstart_h5file+(buftime_h5file*1e7))/(864000000000))+584755 # 584755 = (datenum(1601,1,1,0,0,0)), from IGOR converting to MATLAB
     time_h5file_unix = time_h5file_matlab-719529 # 719529 is the datenum of 01-01-1970 UNIX epoch 
@@ -45,15 +46,36 @@ def h5_read_file(filepath):
    
     peaktable = hf['PeakData/PeakTable'][()]
     df_peaktable = pd.DataFrame(peaktable)
-    df_peaktable
-    
-    peakdata = hf['PeakData/PeakData'][()]
-    df_peakdata = pd.DataFrame(peakdata[:,0,0,:],columns = df_peaktable['mass'])
-    df = pd.concat([df_time, df_peakdata],axis=1)
+
     peaklabel = df_peaktable['label']    
-    exactmass = df_peaktable['mass']
+    exactmass = df_peaktable['mass']  
+    peakname = []
+    for i,label in enumerate(peaklabel):
+        peakname.append(label.decode())
     
-    return df,peaklabel,exactmass
+    #while cycle for confirming the starting position of UMR
+    UMR_start=0
+    while peaklabel[UMR_start].decode()!='nominal2':
+        UMR_start=UMR_start+1
+    
+    peakdata = hf['PeakData/PeakData'][()]/Tofperiod*10**(9) # unit in ions/second
+    df_peakdata_HR = pd.DataFrame(peakdata[:,0,0,0:UMR_start],columns = peakname[0:UMR_start])
+    UMR_upper=800 # upper cutoff for UMR
+    df_peakdata_UMR = pd.DataFrame(peakdata[:,0,0,UMR_start:UMR_start+UMR_upper],columns = df_peaktable['mass'][UMR_start:UMR_start+UMR_upper])
+    df = pd.concat([df_time, df_peakdata_HR, df_peakdata_UMR],axis=1) # df includes time, HR and part of UMR
+    df.index = df['date'] 
+    df=df.drop('UnixTime',axis=1)
+    df=df.drop('date',axis=1)
+    
+    md = exactmass - round(exactmass)
+    md_exactmass = pd.DataFrame([exactmass,md],index=['mass', 'massdefect'])
+    md_exactmass.columns = peakname
+    md_exactmass=md_exactmass.drop('Total ion current', axis=1)
+    if ('nominal2' in md_exactmass): 
+        md_exactmass = md_exactmass.drop('nominal2',axis=1)
+
+    
+    return df,md_exactmass
 
 
 def h5_read_folder(filepath):  
@@ -72,37 +94,13 @@ def h5_read_folder(filepath):
     
     df_help = []
     for filename in os.listdir(filepath):
-        path = filepath+filename
-        path=path.encode('unicode_escape').decode()
-        
-        [df,peaklabel,exactmass] = h5_read_file(path)
-        df_help.append(df)
-    df = pd.concat(df_help,axis=0,ignore_index=True)
-    df.index = df['date'] 
-
-    columns = ['unixtime', 'date']
-    peakname = []
-    for i, label in enumerate(peaklabel):
-        columns.append(label.decode())
-        peakname.append(label.decode())
-         
-    df.columns = columns
-    md = exactmass - round(exactmass)
-    md_exactmass = pd.DataFrame([exactmass,md],index=['mass', 'massdefect'])
-    md_exactmass.columns = peakname
-   # md_exactmass.rename(['mass', 'mass defect'])
-    
-    df['datetime'] = df['date']
-    # remove unnecessary columns
-    df = df.drop('date', axis=1)
-    df = df.drop('unixtime', axis=1)
-    if ('nominal2' in df): 
-        df = df.drop('nominal2', axis=1)
-        md_exactmass = md_exactmass.drop('nominal2',axis=1)
-    # check size of df to remove unnecessary values from exact masses
-    #shape = df.shape
-    #num_col = shape[1]-2
-    #exactmass = exactmass[0:num_col]
-    #md = exactmass - round(exactmass)
+        if filename.endswith(".h5"): # make sure the file ends with .h5
+            path = filepath+filename
+            path=path.encode('unicode_escape').decode()
+            
+            [df,md_exactmass] = h5_read_file(path)
+            df_help.append(df)
+    df = pd.concat(df_help,axis=0)
+    df=df.sort_index() # make sure that the data is in sequence regarding time
     
     return df,md_exactmass
