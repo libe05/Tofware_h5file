@@ -41,6 +41,7 @@ def h5_read_file(filepath,UMR_num=-1):
 
     time_h5file_matlab = ((DAQstart_h5file+(buftime_h5file*1e7))/(864000000000))+584755 # 584755 = (datenum(1601,1,1,0,0,0)), from IGOR converting to MATLAB
     time_h5file_unix = time_h5file_matlab-719529 # 719529 is the datenum of 01-01-1970 UNIX epoch 
+    time_h5file_unix = np.reshape(time_h5file_unix,np.size(time_h5file_unix))
     df_time = pd.DataFrame(time_h5file_unix,columns = ['UnixTime']) # time to pandas dataframe, enables conversion to date
     
     for i in df_time:
@@ -57,6 +58,7 @@ def h5_read_file(filepath,UMR_num=-1):
     
     
     peakdata = hf['PeakData/PeakData'][()]/Tofperiod*10**(9) # unit in ions/second
+    peakdata = peakdata.reshape(-1,*peakdata.shape[-2:])
     # to judge whether UMR exists in the data file
     if('nominal2' in peakname):
         UMR_start=0
@@ -64,19 +66,19 @@ def h5_read_file(filepath,UMR_num=-1):
         while peaklabel[UMR_start].decode()!='nominal2':
             UMR_start=UMR_start+1
         
-        df_peakdata_HR = pd.DataFrame(peakdata[:,0,0,0:UMR_start],columns = peakname[0:UMR_start])
+        df_peakdata_HR = pd.DataFrame(peakdata[:,0,0:UMR_start],columns = peakname[0:UMR_start])
         if (UMR_num==-1):
-            df_peakdata_UMR = pd.DataFrame(peakdata[:,0,0,UMR_start:],columns = df_peaktable['mass'][UMR_start:])
+            df_peakdata_UMR = pd.DataFrame(peakdata[:,0,UMR_start:],columns = df_peaktable['mass'][UMR_start:])
         else:
             # to judge whether the given number of UMR is our of range
             if (UMR_num>(np.size(df_peaktable['mass'])-UMR_start)):
                 warnings.warn('The given number of UMR is out of the range')
-                df_peakdata_UMR = pd.DataFrame(peakdata[:,0,0,UMR_start:],columns = df_peaktable['mass'][UMR_start:])
+                df_peakdata_UMR = pd.DataFrame(peakdata[:,0,UMR_start:],columns = df_peaktable['mass'][UMR_start:])
             else:
-                df_peakdata_UMR = pd.DataFrame(peakdata[:,0,0,UMR_start:UMR_start+UMR_num],columns = df_peaktable['mass'][UMR_start:UMR_start+UMR_num])
+                df_peakdata_UMR = pd.DataFrame(peakdata[:,0,UMR_start:UMR_start+UMR_num],columns = df_peaktable['mass'][UMR_start:UMR_start+UMR_num])
         df = pd.concat([df_time, df_peakdata_HR, df_peakdata_UMR],axis=1) # df includes time, HR and part of UMR
     else:
-        df_peakdata_HR = pd.DataFrame(peakdata[:,0,0,0:],columns = peakname[0:])
+        df_peakdata_HR = pd.DataFrame(peakdata[:,0,0:],columns = peakname[0:])
         df = pd.concat([df_time, df_peakdata_HR],axis=1)
 
     df.index = df['date'] 
