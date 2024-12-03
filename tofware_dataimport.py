@@ -2,7 +2,6 @@
 """
 Created on Wed Oct  5 22:19:41 2022
 
-@author: Lisa Beck
 """
 import pandas as pd
 import numpy as np
@@ -19,7 +18,7 @@ def h5_read_file(filepath,UMR_num=-1):
     ----------
     filepath : TYPE String
         Path to folder including all processed h5 files from Tofware. 
-        Example: r"../../03_Data/CAFE_EU_02/CAFE_EU_02_2020-05-26/Avg-30/Processed/"
+        Example: r"../Data/Avg-30/Processed/"
     UMR_num: number of UMR wanted
 
     Returns : dataframe including date and time as index, HR peaks and nominal unit mass as header and the corresponding data from the mass spec
@@ -104,7 +103,7 @@ def h5_read_folder(filepath,UMR_num=-1):
     ----------
     filepath : TYPE String
         Path to folder including all processed h5 files from Tofware. 
-        Example: r"../../03_Data/CAFE_EU_02/CAFE_EU_02_2020-05-26/Avg-30/Processed/"
+        Example: r"../../Data/Avg-30/Processed/"
     UMR_num: number of UMR wanted
 
     Returns : dataframe including date and time as index, HR peaks and nominal unit mass as header and the corresponding data from the mass spec
